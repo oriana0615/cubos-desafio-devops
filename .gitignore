@@ -1,0 +1,15 @@
+# Ignorar dependências do Node.js
+node_modules/
+
+# Ignorar arquivos de log
+*.log
+
+# Arquivos de estado e cache do Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+
+# Arquivos de sistema operacional
+.DS_Store
+Thumbs.db

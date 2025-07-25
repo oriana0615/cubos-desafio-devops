@@ -1,0 +1,11 @@
+# Usa a imagem oficial e leve do Nginx como base.
+FROM nginx:1.25-alpine
+
+# Remove a configuração padrão do Nginx.
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Copia nosso arquivo de configuração customizado para o lugar certo.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copia o código do frontend (o arquivo index.html) para a pasta que o Nginx serve.
+COPY index.html /usr/share/nginx/html
