@@ -7,6 +7,7 @@
   "author": "Cubos DevOps",
   "license": "ISC",
   "dependencies": {
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "prom-client": "^15.1.2"
   }
 }

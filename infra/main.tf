@@ -45,26 +45,22 @@ resource "docker_volume" "db_data" {
 
 # Cria o contêiner do Banco de Dados (PostgreSQL).
 resource "docker_container" "postgres_db" {
-  image   = "postgres:15.8" # Imagem exigida no desafio.
+  image   = "postgres:15.8"
   name    = "postgres-db"
-  restart = "always"      # Reinicia automaticamente.
+  restart = "always"
 
-  # <-- LINHA ADICIONADA PARA RESOLVER A CONEXÃO
   command = ["postgres", "-c", "listen_addresses=*"]
 
-  # Conecta o banco de dados APENAS à rede interna.
   networks_advanced {
     name = docker_network.internal_network.name
   }
 
-  # Define as variáveis de ambiente com as credenciais do banco.
   env = [
     "POSTGRES_USER=${var.db_user}",
     "POSTGRES_PASSWORD=${var.db_password}",
     "POSTGRES_DB=${var.db_name}",
   ]
 
-  # Mapeia os volumes: um para os dados e outro para o script de inicialização.
   volumes {
     volume_name    = docker_volume.db_data.name
     container_path = "/var/lib/postgresql/data"
@@ -75,7 +71,6 @@ resource "docker_container" "postgres_db" {
     read_only      = true
   }
 
-  # Bloco para verificação de saúde.
   healthcheck {
     test     = ["CMD", "pg_isready", "-U", var.db_user, "-d", var.db_name]
     interval = "10s"
@@ -86,19 +81,17 @@ resource "docker_container" "postgres_db" {
 
 # Cria o contêiner do Backend (Node.js).
 resource "docker_container" "backend" {
-  image = docker_image.backend_image.name
-  name  = "backend"
+  image   = docker_image.backend_image.name
+  name    = "backend"
   restart = "always"
 
-  # Conecta o backend APENAS à rede interna e dá a ele o nome 'backend'.
   networks_advanced {
     name    = docker_network.internal_network.name
     aliases = ["backend"]
   }
 
-  # Define as variáveis de ambiente para o backend se conectar ao banco.
   env = [
-    "POSTGRES_HOST=postgres-db", # O nome do contêiner do banco.
+    "POSTGRES_HOST=postgres-db",
     "POSTGRES_PORT=5432",
     "POSTGRES_USER=${var.db_user}",
     "POSTGRES_PASSWORD=${var.db_password}",
@@ -106,23 +99,20 @@ resource "docker_container" "backend" {
     "PORT=3000"
   ]
 
-  # Garante que o banco de dados seja criado antes do backend.
   depends_on = [docker_container.postgres_db]
 }
 
 # Cria o contêiner do Frontend (Nginx).
 resource "docker_container" "frontend" {
-  image = docker_image.frontend_image.name
-  name  = "frontend-proxy"
+  image   = docker_image.frontend_image.name
+  name    = "frontend-proxy"
   restart = "always"
 
-  # Expõe a porta 80 do contêiner na porta 8080 da sua máquina.
   ports {
     internal = 80
     external = 8080
   }
 
-  # Conecta o frontend a AMBAS as redes.
   networks_advanced {
     name = docker_network.external_network.name
   }
@@ -130,6 +120,59 @@ resource "docker_container" "frontend" {
     name = docker_network.internal_network.name
   }
 
-  # Garante que o backend seja criado antes do frontend.
   depends_on = [docker_container.backend]
+}
+
+# --- DE OBSERVABILIDADE ---
+
+# Cria o contêiner do Prometheus.
+resource "docker_container" "prometheus" {
+  image   = "prom/prometheus:latest"
+  name    = "prometheus"
+  restart = "always"
+
+  ports {
+    internal = 9090
+    external = 9090
+  }
+
+  networks_advanced {
+    name    = docker_network.internal_network.name
+    aliases = ["prometheus"]
+  }
+
+  volumes {
+    host_path      = abspath("./prometheus/prometheus.yml")
+    container_path = "/etc/prometheus/prometheus.yml"
+    read_only      = true
+  }
+
+  depends_on = [docker_container.backend]
+}
+
+# Cria o contêiner do Grafana.
+resource "docker_container" "grafana" {
+  image   = "grafana/grafana:latest"
+  name    = "grafana"
+  restart = "always"
+
+  ports {
+    internal = 3000
+    external = 3001
+  }
+
+  networks_advanced {
+    name = docker_network.internal_network.name
+  }
+  networks_advanced {
+    name = docker_network.external_network.name
+  }
+
+  volumes {
+    host_path      = abspath("./grafana/provisioning/")
+    container_path = "/etc/grafana/provisioning/"
+    read_only      = true
+  }
+
+  depends_on = [docker_container.prometheus]
 }

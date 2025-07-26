@@ -1,10 +1,14 @@
 import http from 'http';
 import PG from 'pg';
+import client from 'prom-client'; 
 
 const PORT = process.env.PORT || 3000;
 
-// PASSO 1: Em vez de um 'Client', criamos um 'Pool'.
-// O Pool gerencia as conexões de forma mais inteligente e resiliente.
+// 2. coletor de métricas
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+
+
 const pool = new PG.Pool({
   host: process.env.POSTGRES_HOST,
   port: process.env.POSTGRES_PORT,
@@ -16,19 +20,27 @@ const pool = new PG.Pool({
 const server = http.createServer(async (req, res) => {
   console.log(`Request: ${req.url}`);
 
-  // Habilitamos o CORS para todas as respostas
+  // 3. rota '/metrics' para o Prometheus
+  if (req.url === '/metrics') {
+    res.setHeader('Content-Type', register.contentType);
+    res.end(await register.metrics());
+    return;
+  }
+  
+  
+  // CORS para todas as outras respostas
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json');
 
   if (req.url === "/") {
-    let client;
+    //lógica funcional da rota principal aqui dentro
+    let dbClient;
     try {
-      // PASSO 2: Para cada requisição, pegamos uma conexão do Pool.
-      client = await pool.connect();
-      const result = (await client.query("SELECT * FROM users WHERE role = 'admin'")).rows[0];
+      dbClient = await pool.connect();
+      const result = (await dbClient.query("SELECT * FROM users WHERE role = 'admin'")).rows[0];
 
       const data = {
-        database: true, // Se a query funcionou, o banco está OK.
+        database: true,
         userAdmin: result?.role === "admin"
       };
       
@@ -38,13 +50,12 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       console.error('Erro ao executar a query ou conectar ao banco:', error.stack);
       const data = { database: false, userAdmin: false };
-      res.writeHead(500); // Erro interno do servidor
+      res.writeHead(500);
       res.end(JSON.stringify(data));
 
     } finally {
-      // PASSO 3: Liberamos a conexão de volta para o Pool, estando ela com erro ou não.
-      if (client) {
-        client.release();
+      if (dbClient) {
+        dbClient.release();
       }
     }
     return;
@@ -58,40 +69,3 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
